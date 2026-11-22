@@ -25,54 +25,63 @@ object NotificationHelper {
 
     fun createNotificationChannels(context: Context) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
-        val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        try {
+            val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager ?: return
 
-        val messageChannel = NotificationChannel(
-            CHANNEL_MESSAGES,
-            "Messages",
-            NotificationManager.IMPORTANCE_HIGH
-        ).apply {
-            description = "Direct chat message notifications"
-            enableVibration(true)
-        }
+            val messageChannel = NotificationChannel(
+                CHANNEL_MESSAGES,
+                "Messages",
+                NotificationManager.IMPORTANCE_HIGH
+            ).apply {
+                description = "Direct chat message notifications"
+                enableVibration(true)
+            }
 
-        val groupChannel = NotificationChannel(
-            CHANNEL_GROUPS,
-            "Group Messages",
-            NotificationManager.IMPORTANCE_HIGH
-        ).apply {
-            description = "Group chat notifications"
-            enableVibration(true)
-        }
+            val groupChannel = NotificationChannel(
+                CHANNEL_GROUPS,
+                "Group Messages",
+                NotificationManager.IMPORTANCE_HIGH
+            ).apply {
+                description = "Group chat notifications"
+                enableVibration(true)
+            }
 
-        val ringtoneUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
-        val callChannel = NotificationChannel(
-            CHANNEL_CALLS,
-            "Incoming Calls",
-            NotificationManager.IMPORTANCE_HIGH
-        ).apply {
-            description = "Incoming voice and video calls"
-            enableVibration(true)
-            setSound(
-                ringtoneUri,
-                AudioAttributes.Builder()
-                    .setUsage(AudioAttributes.USAGE_NOTIFICATION_RINGTONE)
-                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                    .build()
+            val ringtoneUri = try {
+                RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
+            } catch (_: Exception) {
+                null
+            }
+            val callChannel = NotificationChannel(
+                CHANNEL_CALLS,
+                "Incoming Calls",
+                NotificationManager.IMPORTANCE_HIGH
+            ).apply {
+                description = "Incoming voice and video calls"
+                enableVibration(true)
+                if (ringtoneUri != null) {
+                    setSound(
+                        ringtoneUri,
+                        AudioAttributes.Builder()
+                            .setUsage(AudioAttributes.USAGE_NOTIFICATION_RINGTONE)
+                            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                            .build()
+                    )
+                }
+            }
+
+            val missedCallChannel = NotificationChannel(
+                CHANNEL_MISSED_CALLS,
+                "Missed Calls",
+                NotificationManager.IMPORTANCE_DEFAULT
+            ).apply {
+                description = "Missed voice and video call alerts"
+            }
+
+            manager.createNotificationChannels(
+                listOf(messageChannel, groupChannel, callChannel, missedCallChannel)
             )
+        } catch (_: Exception) {
         }
-
-        val missedCallChannel = NotificationChannel(
-            CHANNEL_MISSED_CALLS,
-            "Missed Calls",
-            NotificationManager.IMPORTANCE_DEFAULT
-        ).apply {
-            description = "Missed voice and video call alerts"
-        }
-
-        manager.createNotificationChannels(
-            listOf(messageChannel, groupChannel, callChannel, missedCallChannel)
-        )
     }
 
     fun showChatNotification(
@@ -101,7 +110,7 @@ object NotificationHelper {
         val contentText = if (showPreview) body else "New message on Alok Chat"
 
         val builder = NotificationCompat.Builder(context, channelId)
-            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(title)
             .setContentText(contentText)
             .setAutoCancel(true)
@@ -113,7 +122,15 @@ object NotificationHelper {
             builder.setSilent(true)
         }
 
-        NotificationManagerCompat.from(context).notify(chatId.hashCode(), builder.build())
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) {
+            return
+        }
+        try {
+            NotificationManagerCompat.from(context).notify(chatId.hashCode(), builder.build())
+        } catch (_: SecurityException) {
+        }
     }
 
     fun showIncomingCallNotification(
@@ -137,7 +154,7 @@ object NotificationHelper {
 
         val callType = if (isVideo) "Incoming video call" else "Incoming voice call"
         val notification = NotificationCompat.Builder(context, CHANNEL_CALLS)
-            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(callerName)
             .setContentText("$callType • ALOK CHAT")
             .setPriority(NotificationCompat.PRIORITY_MAX)
@@ -147,7 +164,15 @@ object NotificationHelper {
             .setContentIntent(pendingIntent)
             .build()
 
-        NotificationManagerCompat.from(context).notify(callId.hashCode(), notification)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) {
+            return
+        }
+        try {
+            NotificationManagerCompat.from(context).notify(callId.hashCode(), notification)
+        } catch (_: SecurityException) {
+        }
     }
 
     fun showMissedCallNotification(
@@ -161,14 +186,22 @@ object NotificationHelper {
 
         val callType = if (isVideo) "Missed video call" else "Missed voice call"
         val notification = NotificationCompat.Builder(context, CHANNEL_MISSED_CALLS)
-            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(callType)
             .setContentText("From $callerName")
             .setAutoCancel(true)
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .build()
 
-        NotificationManagerCompat.from(context).notify(("missed_$callId").hashCode(), notification)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) {
+            return
+        }
+        try {
+            NotificationManagerCompat.from(context).notify(("missed_$callId").hashCode(), notification)
+        } catch (_: SecurityException) {
+        }
     }
 
     fun cancelNotification(context: Context, id: String) {

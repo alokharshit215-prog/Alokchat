@@ -18,8 +18,8 @@ class AlokChatMessagingService : FirebaseMessagingService() {
 
     override fun onNewToken(token: String) {
         super.onNewToken(token)
-        val uid = FirebaseAuth.getInstance().currentUser?.uid ?: return
-        FirebaseDatabase.getInstance().reference
+        val uid = try { FirebaseAuth.getInstance().currentUser?.uid } catch (_: Exception) { null } ?: return
+        FirebaseDatabase.getInstance("https://alok-chat-5d65c-default-rtdb.firebaseio.com").reference
             .child("users")
             .child(uid)
             .child("fcmToken")

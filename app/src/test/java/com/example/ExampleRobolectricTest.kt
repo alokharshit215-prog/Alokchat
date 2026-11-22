@@ -7,20 +7,25 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performScrollTo
+import androidx.test.core.app.ActivityScenario
 import androidx.test.core.app.ApplicationProvider
 import com.example.data.model.StatusPrivacyMode
 import com.example.data.model.UserProfile
 import com.example.ui.components.MessageStatusTicks
 import com.example.ui.screens.SplashScreen
+import com.example.ui.screens.auth.AuthFlowScreen
 import com.example.ui.screens.settings.AboutScreen
 import com.example.ui.screens.status.StatusPrivacySettingsDialog
 import com.example.ui.theme.AlokChatTheme
+import com.example.ui.viewmodel.AuthViewModel
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import org.robolectric.shadows.ShadowLooper
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
@@ -34,6 +39,36 @@ class ExampleRobolectricTest {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val appName = context.getString(R.string.app_name)
         assertEquals("Alok Chat", appName)
+    }
+
+    @Test
+    fun `main activity launches without crashing through splash transition`() {
+        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+            scenario.onActivity { activity ->
+                assertTrue(!activity.isFinishing)
+            }
+            composeTestRule.waitForIdle()
+            ShadowLooper.idleMainLooper(2000L, java.util.concurrent.TimeUnit.MILLISECONDS)
+            composeTestRule.waitForIdle()
+            scenario.onActivity { activity ->
+                assertTrue(!activity.isFinishing)
+            }
+        }
+    }
+
+    @Test
+    fun `auth flow screen displays Sign In and Create Account tabs`() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val app = context.applicationContext as AlokChatApp
+        val authVm = AuthViewModel(app.container.authRepository, app.container.userRepository)
+        composeTestRule.setContent {
+            AlokChatTheme {
+                AuthFlowScreen(viewModel = authVm, onAuthenticated = {})
+            }
+        }
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithText("Create Account").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Welcome back").assertIsDisplayed()
     }
 
     @Test

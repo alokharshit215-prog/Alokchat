@@ -380,8 +380,7 @@ fun AuthFlowScreen(
                 }
             }
 
-            Spacer(Modifier.weight(1f))
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(28.dp))
             AlokCreditFooter()
         }
     }

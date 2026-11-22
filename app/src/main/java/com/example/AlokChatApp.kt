@@ -4,6 +4,7 @@ import android.app.Application
 import android.util.Log
 import com.example.di.AppContainer
 import com.example.service.NotificationHelper
+import com.google.firebase.FirebaseApp
 import com.google.firebase.database.FirebaseDatabase
 
 class AlokChatApp : Application() {
@@ -13,6 +14,13 @@ class AlokChatApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        try {
+            if (FirebaseApp.getApps(this).isEmpty()) {
+                FirebaseApp.initializeApp(this)
+            }
+        } catch (e: Exception) {
+            Log.w("AlokChatApp", "FirebaseApp init skipped: ${e.message}")
+        }
         try {
             FirebaseDatabase.getInstance("https://alok-chat-5d65c-default-rtdb.firebaseio.com")
                 .setPersistenceEnabled(true)

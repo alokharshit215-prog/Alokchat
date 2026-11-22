@@ -1,8 +1,10 @@
 package com.example.data.prefs
 
 import android.content.Context
+import androidx.datastore.core.handlers.ReplaceFileCorruptionHandler
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
@@ -10,9 +12,14 @@ import com.example.data.model.AppSettingsState
 import com.example.data.model.FontSizePreference
 import com.example.data.model.ThemePreference
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.map
+import java.io.IOException
 
-private val Context.dataStore by preferencesDataStore(name = "alok_chat_settings")
+private val Context.dataStore by preferencesDataStore(
+    name = "alok_chat_settings",
+    corruptionHandler = ReplaceFileCorruptionHandler { emptyPreferences() }
+)
 
 class UserPreferences(private val context: Context) {
 
@@ -28,14 +35,22 @@ class UserPreferences(private val context: Context) {
         val WALLPAPER_IDX = intPreferencesKey("wallpaper_idx")
     }
 
-    val settingsFlow: Flow<AppSettingsState> = context.dataStore.data.map { prefs ->
-        val theme = prefs[Keys.THEME]?.let { raw ->
-            ThemePreference.entries.firstOrNull { it.name == raw }
-        } ?: ThemePreference.SYSTEM
+    val settingsFlow: Flow<AppSettingsState> = context.dataStore.data
+        .catch { exception ->
+            if (exception is IOException) {
+                emit(emptyPreferences())
+            } else {
+                emit(emptyPreferences())
+            }
+        }
+        .map { prefs ->
+            val theme = prefs[Keys.THEME]?.let { raw ->
+                ThemePreference.entries.firstOrNull { it.name == raw }
+            } ?: ThemePreference.SYSTEM
 
-        val fontSize = prefs[Keys.FONT_SIZE]?.let { raw ->
-            FontSizePreference.entries.firstOrNull { it.name == raw }
-        } ?: FontSizePreference.MEDIUM
+            val fontSize = prefs[Keys.FONT_SIZE]?.let { raw ->
+                FontSizePreference.entries.firstOrNull { it.name == raw }
+            } ?: FontSizePreference.MEDIUM
 
         AppSettingsState(
             themePreference = theme,

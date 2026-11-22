@@ -34,7 +34,8 @@ class StatusRepository(private val db: FirebaseDatabase) {
                         val ownerUid = userNode.key ?: return@forEach
                         if (ownerUid in blockedUids) return@forEach
                         userNode.children.forEach { statusNode ->
-                            val raw = statusNode.getValue(StatusItem::class.java) ?: return@forEach
+                            val raw = runCatching { statusNode.getValue(StatusItem::class.java) }.getOrNull()
+                                ?: return@forEach
                             val item = raw.copy(
                                 id = statusNode.key ?: raw.id,
                                 uid = raw.uid.ifBlank { ownerUid }
@@ -139,8 +140,9 @@ class StatusRepository(private val db: FirebaseDatabase) {
         val ref = statusViewsRef.child(ownerUid).child(statusId)
         val listener = object : ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {
-                val viewers = snapshot.children.mapNotNull { it.getValue(StatusViewer::class.java) }
-                    .sortedByDescending { it.viewedAt }
+                val viewers = snapshot.children.mapNotNull {
+                    runCatching { it.getValue(StatusViewer::class.java) }.getOrNull()
+                }.sortedByDescending { it.viewedAt }
                 trySend(viewers)
             }
 

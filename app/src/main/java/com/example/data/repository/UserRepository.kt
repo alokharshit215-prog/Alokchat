@@ -39,7 +39,8 @@ class UserRepository(private val db: FirebaseDatabase) {
         val ref = usersRef.child(uid)
         val listener = object : ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {
-                trySend(snapshot.getValue(UserProfile::class.java))
+                val profile = runCatching { snapshot.getValue(UserProfile::class.java) }.getOrNull()
+                trySend(profile)
             }
 
             override fun onCancelled(error: DatabaseError) {
@@ -259,7 +260,7 @@ class UserRepository(private val db: FirebaseDatabase) {
         val userRef = usersRef.child(uid)
         val listener = object : ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {
-                val connected = snapshot.getValue(Boolean::class.java) ?: false
+                val connected = runCatching { snapshot.getValue(Boolean::class.java) }.getOrNull() ?: false
                 if (connected) {
                     userRef.child("online").onDisconnect().setValue(false)
                     userRef.child("lastSeen").onDisconnect().setValue(ServerValue.TIMESTAMP)
@@ -333,7 +334,7 @@ class UserRepository(private val db: FirebaseDatabase) {
     suspend fun listAllOtherUsers(currentUid: String): List<UserProfile> {
         return try {
             val snap = usersRef.get().await()
-            snap.children.mapNotNull { it.getValue(UserProfile::class.java) }
+            snap.children.mapNotNull { runCatching { it.getValue(UserProfile::class.java) }.getOrNull() }
                 .filter { it.uid != currentUid }
                 .sortedBy { it.bestDisplayName().lowercase() }
         } catch (e: Exception) {
@@ -420,7 +421,8 @@ class UserRepository(private val db: FirebaseDatabase) {
         val listener = object : ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {
                 val ids = snapshot.children.mapNotNull { child ->
-                    if (child.getValue(Boolean::class.java) == true) child.key else null
+                    val enabled = runCatching { child.getValue(Boolean::class.java) }.getOrNull() == true
+                    if (enabled) child.key else null
                 }.toSet()
                 trySend(ids)
             }

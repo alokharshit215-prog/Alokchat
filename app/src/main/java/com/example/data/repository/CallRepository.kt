@@ -67,7 +67,9 @@ class CallRepository(private val db: FirebaseDatabase) {
         val listener = object : ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {
                 val now = System.currentTimeMillis()
-                val ringing = snapshot.children.mapNotNull { it.getValue(CallSession::class.java) }
+                val ringing = snapshot.children.mapNotNull {
+                    runCatching { it.getValue(CallSession::class.java) }.getOrNull()
+                }
                     .firstOrNull {
                         it.status == CallStatus.RINGING.name && (now - it.createdAt) < 90_000L
                     }
@@ -84,7 +86,7 @@ class CallRepository(private val db: FirebaseDatabase) {
         val ref = callsRef.child(callId)
         val listener = object : ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {
-                trySend(snapshot.getValue(CallSession::class.java))
+                trySend(runCatching { snapshot.getValue(CallSession::class.java) }.getOrNull())
             }
 
             override fun onCancelled(error: DatabaseError) {}
@@ -127,7 +129,7 @@ class CallRepository(private val db: FirebaseDatabase) {
         val ref = callsRef.child(callId).child(remoteBranch)
         val listener = object : ChildEventListener {
             override fun onChildAdded(snapshot: DataSnapshot, previousChildName: String?) {
-                snapshot.getValue(IceCandidateData::class.java)?.let { trySend(it) }
+                runCatching { snapshot.getValue(IceCandidateData::class.java) }.getOrNull()?.let { trySend(it) }
             }
 
             override fun onChildChanged(snapshot: DataSnapshot, previousChildName: String?) {}
@@ -174,8 +176,9 @@ class CallRepository(private val db: FirebaseDatabase) {
         val ref = callHistoryRef.child(uid).orderByChild("timestamp").limitToLast(100)
         val listener = object : ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {
-                val list = snapshot.children.mapNotNull { it.getValue(CallHistoryEntry::class.java) }
-                    .sortedByDescending { it.timestamp }
+                val list = snapshot.children.mapNotNull {
+                    runCatching { it.getValue(CallHistoryEntry::class.java) }.getOrNull()
+                }.sortedByDescending { it.timestamp }
                 trySend(list)
             }
 

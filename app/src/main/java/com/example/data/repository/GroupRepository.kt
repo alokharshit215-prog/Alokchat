@@ -26,7 +26,7 @@ class GroupRepository(private val db: FirebaseDatabase) {
         val ref = groupsRef.child(groupId)
         val listener = object : ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {
-                trySend(snapshot.getValue(GroupInfo::class.java))
+                trySend(runCatching { snapshot.getValue(GroupInfo::class.java) }.getOrNull())
             }
 
             override fun onCancelled(error: DatabaseError) {}

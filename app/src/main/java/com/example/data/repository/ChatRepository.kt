@@ -34,7 +34,9 @@ class ChatRepository(private val db: FirebaseDatabase) {
         val ref = userChatsRef.child(uid)
         val listener = object : ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {
-                val list = snapshot.children.mapNotNull { it.getValue(ChatSummary::class.java) }
+                val list = snapshot.children.mapNotNull { child ->
+                    runCatching { child.getValue(ChatSummary::class.java) }.getOrNull()
+                }
                     .sortedWith(
                         compareByDescending<ChatSummary> { it.pinned }
                             .thenByDescending { it.lastMessageAt }
@@ -62,7 +64,8 @@ class ChatRepository(private val db: FirebaseDatabase) {
         val listener = object : ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {
                 val list = snapshot.children.mapNotNull { child ->
-                    child.getValue(ChatMessage::class.java)?.copy(id = child.key ?: "")
+                    runCatching { child.getValue(ChatMessage::class.java) }.getOrNull()
+                        ?.copy(id = child.key ?: "")
                 }.sortedBy { it.timestamp }
                 trySend(list)
             }
@@ -80,7 +83,7 @@ class ChatRepository(private val db: FirebaseDatabase) {
         val listener = object : ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {
                 val typingIds = snapshot.children.mapNotNull { child ->
-                    val isTyping = child.getValue(Boolean::class.java) ?: false
+                    val isTyping = runCatching { child.getValue(Boolean::class.java) }.getOrNull() ?: false
                     val uid = child.key
                     if (isTyping && uid != null && uid != currentUid) uid else null
                 }
