@@ -174,6 +174,8 @@ fun ChatScreen(
     var showForwardDialog by remember { mutableStateOf(false) }
     var showDeleteDialog by remember { mutableStateOf(false) }
     var showReportDialog by remember { mutableStateOf(false) }
+    var showClearChatDialog by remember { mutableStateOf(false) }
+    var showDeleteChatDialog by remember { mutableStateOf(false) }
     var showContactPicker by remember { mutableStateOf(false) }
     var deviceContacts by remember { mutableStateOf<List<DeviceContact>>(emptyList()) }
     var previewMediaUris by remember { mutableStateOf<Pair<List<Uri>, MessageType>?>(null) }
@@ -471,6 +473,20 @@ fun ChatScreen(
                                         onClick = {
                                             showMenu = false
                                             searchInChat = true
+                                        }
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text("Clear chat") },
+                                        onClick = {
+                                            showMenu = false
+                                            showClearChatDialog = true
+                                        }
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text("Delete chat", color = AlokDangerRed) },
+                                        onClick = {
+                                            showMenu = false
+                                            showDeleteChatDialog = true
                                         }
                                     )
                                     if (!viewModel.isGroup && viewModel.peerUid.isNotBlank()) {
@@ -1009,6 +1025,51 @@ fun ChatScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showReportDialog = false }) { Text("Cancel") }
+            }
+        )
+    }
+
+    if (showClearChatDialog) {
+        AlertDialog(
+            onDismissRequest = { showClearChatDialog = false },
+            title = { Text("Clear this chat?") },
+            text = { Text("Messages in this chat will be cleared for you.") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showClearChatDialog = false
+                        viewModel.clearChat()
+                    }
+                ) { Text("Clear") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showClearChatDialog = false }) { Text("Cancel") }
+            }
+        )
+    }
+
+    if (showDeleteChatDialog) {
+        AlertDialog(
+            onDismissRequest = { showDeleteChatDialog = false },
+            title = { Text("Delete chat?") },
+            text = { Text("Delete this chat and remove it from your chat list?") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showDeleteChatDialog = false
+                        viewModel.deleteChat {
+                            mainViewModel.showToast("Chat deleted")
+                            onBack()
+                        }
+                    },
+                    colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                        containerColor = AlokDangerRed,
+                        contentColor = Color.White
+                    )
+                ) { Text("Delete") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteChatDialog = false }) { Text("Cancel") }
             }
         )
     }

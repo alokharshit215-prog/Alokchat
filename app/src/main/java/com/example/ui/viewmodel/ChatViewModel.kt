@@ -389,6 +389,31 @@ class ChatViewModel(
         }
     }
 
+    fun clearChat() {
+        viewModelScope.launch {
+            chatRepository.clearChatForMe(currentUid, chatId)
+                .onSuccess {
+                    clearSelection()
+                    _statusToast.value = "Chat cleared"
+                }
+                .onFailure { err ->
+                    _statusToast.value = err.message ?: "Could not clear chat"
+                }
+        }
+    }
+
+    fun deleteChat(onDeleted: () -> Unit) {
+        viewModelScope.launch {
+            chatRepository.deleteChatForMe(currentUid, chatId)
+                .onSuccess {
+                    onDeleted()
+                }
+                .onFailure { err ->
+                    _statusToast.value = err.message ?: "Could not delete chat"
+                }
+        }
+    }
+
     override fun onCleared() {
         super.onCleared()
         onTypingChanged(false)

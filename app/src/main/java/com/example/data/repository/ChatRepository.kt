@@ -435,6 +435,45 @@ class ChatRepository(private val db: FirebaseDatabase) {
         userChatsRef.child(uid).child(chatId).child("muted").setValue(muted).await()
     }
 
+    suspend fun clearChatForMe(uid: String, chatId: String): Result<Unit> {
+        return try {
+            val snap = messagesRef.child(chatId).get().await()
+            snap.children.forEach { child ->
+                val alreadyDeleted = child.child("deletedFor").child(uid).getValue(Boolean::class.java) == true
+                if (!alreadyDeleted) {
+                    child.ref.child("deletedFor").child(uid).setValue(true).await()
+                }
+            }
+            userChatsRef.child(uid).child(chatId).updateChildren(
+                mapOf(
+                    "lastMessage" to "",
+                    "unreadCount" to 0
+                )
+            ).await()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Log.e(TAG, "clearChatForMe failed", e)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun deleteChatForMe(uid: String, chatId: String): Result<Unit> {
+        return try {
+            val snap = messagesRef.child(chatId).get().await()
+            snap.children.forEach { child ->
+                val alreadyDeleted = child.child("deletedFor").child(uid).getValue(Boolean::class.java) == true
+                if (!alreadyDeleted) {
+                    child.ref.child("deletedFor").child(uid).setValue(true).await()
+                }
+            }
+            userChatsRef.child(uid).child(chatId).removeValue().await()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Log.e(TAG, "deleteChatForMe failed", e)
+            Result.failure(e)
+        }
+    }
+
     suspend fun loadStarredMessages(uid: String): List<ChatMessage> {
         return try {
             val userChatSnap = userChatsRef.child(uid).get().await()

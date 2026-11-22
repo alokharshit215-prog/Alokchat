@@ -442,6 +442,18 @@ class MainViewModel(
         viewModelScope.launch { chatRepository.toggleMuteChat(currentUid, chatId, muted) }
     }
 
+    fun deleteChat(chatId: String) {
+        viewModelScope.launch {
+            chatRepository.deleteChatForMe(currentUid, chatId)
+                .onSuccess {
+                    _toastMessage.value = "Chat deleted"
+                }
+                .onFailure { err ->
+                    _toastMessage.value = err.message ?: "Could not delete chat"
+                }
+        }
+    }
+
     fun loadStarredMessages() {
         viewModelScope.launch {
             _starredMessages.value = chatRepository.loadStarredMessages(currentUid)

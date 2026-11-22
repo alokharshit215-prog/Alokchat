@@ -38,6 +38,7 @@ import androidx.compose.material.icons.filled.AddIcCall
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.MoreVert
@@ -137,6 +138,7 @@ fun HomeScreen(
     var searchQuery by remember { mutableStateOf("") }
     var menuExpanded by remember { mutableStateOf(false) }
     var chatContextTarget by remember { mutableStateOf<ChatSummary?>(null) }
+    var deleteChatConfirmTarget by remember { mutableStateOf<ChatSummary?>(null) }
     var showStatusPrivacyDialog by remember { mutableStateOf(false) }
 
     val pagerState = rememberPagerState(initialPage = 0, pageCount = { 3 })
@@ -438,11 +440,49 @@ fun HomeScreen(
                             chatContextTarget = null
                         }
                     )
+                    DropdownMenuItem(
+                        text = { Text("Delete chat", color = AlokDangerRed) },
+                        leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null, tint = AlokDangerRed) },
+                        onClick = {
+                            deleteChatConfirmTarget = target
+                            chatContextTarget = null
+                        }
+                    )
                 }
             },
             confirmButton = {
                 androidx.compose.material3.TextButton(onClick = { chatContextTarget = null }) {
                     Text("Close")
+                }
+            }
+        )
+    }
+
+    deleteChatConfirmTarget?.let { target ->
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { deleteChatConfirmTarget = null },
+            title = { Text("Delete chat?") },
+            text = {
+                Text("Delete chat with ${target.title.ifBlank { "this user" }}? All messages in this chat will be removed from your chat list.")
+            },
+            confirmButton = {
+                androidx.compose.material3.Button(
+                    onClick = {
+                        viewModel.deleteChat(target.chatId)
+                        deleteChatConfirmTarget = null
+                    },
+                    colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                        containerColor = AlokDangerRed,
+                        contentColor = Color.White
+                    ),
+                    modifier = Modifier.testTag("confirm_delete_chat_button")
+                ) {
+                    Text("Delete")
+                }
+            },
+            dismissButton = {
+                androidx.compose.material3.TextButton(onClick = { deleteChatConfirmTarget = null }) {
+                    Text("Cancel")
                 }
             }
         )
