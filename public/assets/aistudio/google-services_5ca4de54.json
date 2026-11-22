@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "1080580124098",
+    "firebase_url": "https://alok-chat-5d65c-default-rtdb.firebaseio.com",
+    "project_id": "alok-chat-5d65c",
+    "storage_bucket": "alok-chat-5d65c.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1080580124098:android:84c3ec23c8d3c47cc1ba5b",
+        "android_client_info": {
+          "package_name": "com.aistudio.alokchat.rqwtxv"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "1080580124098-nj7o5cpr5a0g9rogtkisarv2n7r843o8.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.aistudio.alokchat.rqwtxv",
+            "certificate_hash": "1d3f0cf8c5b77344ae48a68fbc09f9c0d8aa1768"
+          }
+        },
+        {
+          "client_id": "1080580124098-nr4pvsu4g7l7d5amjm0v3brdqjv6j83c.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA0ci_f5-FECE8WWjAV2SERQ9wufv7bkWs"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "1080580124098-nr4pvsu4g7l7d5amjm0v3brdqjv6j83c.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

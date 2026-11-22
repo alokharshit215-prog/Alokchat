@@ -1,0 +1,6 @@
+{
+  "name": "Alok Chat",
+  "description": "WhatsApp-inspired real-time messaging, media sharing, status updates, and calling app created by Alok and supported by Harshit.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

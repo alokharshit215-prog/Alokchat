@@ -1,0 +1,29 @@
+<resources>
+    <string name="app_name">Alok Chat</string>
+    <string name="brand_title">ALOK CHAT</string>
+    <string name="brand_created_by">Created by Alok</string>
+    <string name="brand_supported_by">Supported by Harshit</string>
+    <string name="brand_tagline">Fast, reliable messaging &amp; calling</string>
+    <string name="login_title">Sign in with your Email</string>
+    <string name="login_subtitle">Sign in or create an account with your email and password to start messaging.</string>
+    <string name="send_otp_button">Sign In</string>
+    <string name="verify_otp_button">Create Account</string>
+    <string name="resend_otp_button">Forgot Password?</string>
+    <string name="otp_title">Create your account</string>
+    <string name="error_invalid_phone">Please enter a valid email address.</string>
+    <string name="error_invalid_otp">Incorrect email or password.</string>
+    <string name="error_expired_otp">Password reset link sent to your email.</string>
+    <string name="error_network">Network error. Please check your internet connection and retry.</string>
+    <string name="error_too_many_requests">Too many attempts. Please wait before trying again.</string>
+    <string name="tab_chats">Chats</string>
+    <string name="tab_updates">Updates</string>
+    <string name="tab_calls">Calls</string>
+    <string name="empty_chats_title">Welcome to Alok Chat</string>
+    <string name="empty_chats_subtitle">Tap the New Chat button below to search by @username, email, or name and start messaging.</string>
+    <string name="empty_updates_title">No recent updates</string>
+    <string name="empty_updates_subtitle">Share a photo, video, or text status that disappears automatically after 24 hours.</string>
+    <string name="empty_calls_title">No calls yet</string>
+    <string name="empty_calls_subtitle">Start a crystal-clear WebRTC voice or video call from any chat or the button below.</string>
+    <string name="invite_message">Join me on ALOK CHAT for instant messaging, status updates, voice &amp; video calls! Download &amp; connect with me at https://alok-chat-5d65c.web.app</string>
+    <string name="about_security_note">Messages and media are transmitted over encrypted TLS connections and protected by Firebase Authentication and security rules. End-to-end encryption is not claimed in this build.</string>
+</resources>
