@@ -64,6 +64,11 @@ class AlokChatMessagingService : FirebaseMessagingService() {
                 else -> {
                     val chatId = data["chatId"] ?: "general"
                     val isGroup = data["isGroup"] == "true"
+                    val currentUid = FirebaseAuth.getInstance().currentUser?.uid
+                    if (!currentUid.isNullOrBlank() && chatId != "general") {
+                        com.example.data.repository.ChatRepository(FirebaseDatabase.getInstance("https://alok-chat-5d65c-default-rtdb.firebaseio.com"))
+                            .markChatMessagesDelivered(chatId, currentUid)
+                    }
                     NotificationHelper.showChatNotification(
                         context = applicationContext,
                         chatId = chatId,

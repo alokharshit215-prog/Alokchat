@@ -362,6 +362,37 @@ class ChatRepository(private val db: FirebaseDatabase) {
         }
     }
 
+    suspend fun markChatMessagesDelivered(
+        chatId: String,
+        uid: String
+    ) {
+        if (chatId.isBlank() || uid.isBlank()) return
+        try {
+            val snap = messagesRef.child(chatId)
+                .orderByChild("timestamp")
+                .limitToLast(40)
+                .get()
+                .await()
+            val msgs = snap.children.mapNotNull { child ->
+                child.getValue(ChatMessage::class.java)?.copy(id = child.key ?: "")
+            }
+            msgs.filter { it.senderId != uid && !it.deletedForAll && it.deliveredTo[uid] != true }
+                .forEach { msg ->
+                    messagesRef.child(chatId).child(msg.id).child("deliveredTo").child(uid).setValue(true)
+                }
+
+            val latest = msgs.maxByOrNull { it.timestamp }
+            if (latest != null && latest.senderId.isNotBlank() && latest.senderId != uid) {
+                val senderStatusRef = userChatsRef.child(latest.senderId).child(chatId).child("lastMessageStatus")
+                val currentStatus = senderStatusRef.get().await().getValue(String::class.java)
+                if (currentStatus == null || currentStatus == MessageStatus.SENT.name) {
+                    senderStatusRef.setValue(MessageStatus.DELIVERED.name)
+                }
+            }
+        } catch (_: Exception) {
+        }
+    }
+
     suspend fun markMessagesDeliveredAndRead(
         chatId: String,
         uid: String,
@@ -370,12 +401,26 @@ class ChatRepository(private val db: FirebaseDatabase) {
     ) {
         try {
             userChatsRef.child(uid).child(chatId).child("unreadCount").setValue(0)
-            messages.filter { it.senderId != uid && !it.deletedForAll }.forEach { msg ->
+            val incoming = messages.filter { it.senderId != uid && !it.deletedForAll }
+            incoming.forEach { msg ->
                 if (msg.deliveredTo[uid] != true) {
                     messagesRef.child(chatId).child(msg.id).child("deliveredTo").child(uid).setValue(true)
                 }
                 if (sendReadReceipts && msg.readBy[uid] != true) {
                     messagesRef.child(chatId).child(msg.id).child("readBy").child(uid).setValue(true)
+                }
+            }
+
+            val latest = messages.filterNot { it.deletedForAll }.maxByOrNull { it.timestamp }
+            if (latest != null && latest.senderId.isNotBlank() && latest.senderId != uid) {
+                val senderStatusRef = userChatsRef.child(latest.senderId).child(chatId).child("lastMessageStatus")
+                if (sendReadReceipts) {
+                    senderStatusRef.setValue(MessageStatus.READ.name)
+                } else {
+                    val currentStatus = senderStatusRef.get().await().getValue(String::class.java)
+                    if (currentStatus == null || currentStatus == MessageStatus.SENT.name) {
+                        senderStatusRef.setValue(MessageStatus.DELIVERED.name)
+                    }
                 }
             }
         } catch (_: Exception) {

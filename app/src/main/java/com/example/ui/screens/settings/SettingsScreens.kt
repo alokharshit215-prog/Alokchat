@@ -74,6 +74,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.R
 import com.example.data.model.FontSizePreference
 import com.example.data.model.PrivacyOption
+import com.example.data.model.StatusPrivacyMode
 import com.example.data.model.ThemePreference
 import com.example.data.repository.AuthRepository
 import com.example.data.repository.UserRepository
@@ -81,6 +82,8 @@ import com.example.ui.components.AlokBrandLogo
 import com.example.ui.components.AlokCreditFooter
 import com.example.ui.components.ImageCropDialog
 import com.example.ui.components.UserAvatar
+import com.example.ui.screens.status.StatusPrivacySettingsDialog
+import com.example.ui.screens.status.formatStatusPrivacySummary
 import com.example.ui.theme.AlokDangerRed
 import com.example.ui.viewmodel.MainViewModel
 import com.example.util.FormatUtils
@@ -255,9 +258,11 @@ fun SettingsScreen(
     val settings by viewModel.settings.collectAsStateWithLifecycle()
     val blockedUids by viewModel.blockedUids.collectAsStateWithLifecycle()
     val allUsers by viewModel.allUsers.collectAsStateWithLifecycle()
+    val contactUids by viewModel.myContactAndChatUids.collectAsStateWithLifecycle()
     val context = LocalContext.current
 
     var activeSubDialog by remember { mutableStateOf<String?>(null) }
+    var showStatusPrivacyDialog by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -353,7 +358,12 @@ fun SettingsScreen(
             var photo by remember { mutableStateOf(PrivacyOption.entries.firstOrNull { it.name == u?.privacyPhoto } ?: PrivacyOption.EVERYONE) }
             var lastSeen by remember { mutableStateOf(PrivacyOption.entries.firstOrNull { it.name == u?.privacyLastSeen } ?: PrivacyOption.EVERYONE) }
             var online by remember { mutableStateOf(PrivacyOption.entries.firstOrNull { it.name == u?.privacyOnline } ?: PrivacyOption.EVERYONE) }
-            var status by remember { mutableStateOf(PrivacyOption.entries.firstOrNull { it.name == u?.privacyStatus } ?: PrivacyOption.EVERYONE) }
+            val statusMode = u?.resolvedStatusPrivacyMode() ?: StatusPrivacyMode.EVERYONE
+            val statusLabel = formatStatusPrivacySummary(
+                mode = statusMode,
+                excludedCount = u?.statusExcludedUids?.count { it.value } ?: 0,
+                allowedCount = u?.statusAllowedUids?.count { it.value } ?: 0
+            )
             var receipts by remember { mutableStateOf(u?.readReceiptsEnabled ?: true) }
             AlertDialog(
                 onDismissRequest = { activeSubDialog = null },
@@ -369,8 +379,16 @@ fun SettingsScreen(
                         PrivacyCycleRow("Online status", online) {
                             online = PrivacyOption.entries[(online.ordinal + 1) % PrivacyOption.entries.size]
                         }
-                        PrivacyCycleRow("Status updates", status) {
-                            status = PrivacyOption.entries[(status.ordinal + 1) % PrivacyOption.entries.size]
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { showStatusPrivacyDialog = true }
+                                .padding(vertical = 6.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("Status updates", style = MaterialTheme.typography.bodyLarge)
+                            Text(statusLabel, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
                         }
                         Row(
                             modifier = Modifier.fillMaxWidth(),
@@ -384,7 +402,12 @@ fun SettingsScreen(
                 },
                 confirmButton = {
                     Button(onClick = {
-                        viewModel.updatePrivacy(photo, lastSeen, online, status, receipts)
+                        val legacyStatus = when (statusMode) {
+                            StatusPrivacyMode.EVERYONE -> PrivacyOption.EVERYONE
+                            StatusPrivacyMode.MY_CONTACTS, StatusPrivacyMode.MY_CONTACTS_EXCEPT -> PrivacyOption.CONTACTS
+                            StatusPrivacyMode.ONLY_SHARE_WITH -> PrivacyOption.NOBODY
+                        }
+                        viewModel.updatePrivacy(photo, lastSeen, online, legacyStatus, receipts)
                         activeSubDialog = null
                     }) { Text("Save") }
                 },
@@ -508,6 +531,22 @@ fun SettingsScreen(
                 }
             )
         }
+    }
+
+    if (showStatusPrivacyDialog) {
+        val u = user
+        StatusPrivacySettingsDialog(
+            initialMode = u?.resolvedStatusPrivacyMode() ?: StatusPrivacyMode.EVERYONE,
+            initialExcludedUids = u?.statusExcludedUids?.filterValues { it }?.keys ?: emptySet(),
+            initialAllowedUids = u?.statusAllowedUids?.filterValues { it }?.keys ?: emptySet(),
+            allUsers = allUsers,
+            contactUids = contactUids,
+            onSave = { mode, excl, allow ->
+                viewModel.updateStatusPrivacy(mode, excl, allow)
+                showStatusPrivacyDialog = false
+            },
+            onDismiss = { showStatusPrivacyDialog = false }
+        )
     }
 }
 

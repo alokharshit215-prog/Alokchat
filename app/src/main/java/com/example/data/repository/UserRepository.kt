@@ -5,6 +5,7 @@ import android.provider.ContactsContract
 import android.util.Log
 import com.example.data.model.DeviceContact
 import com.example.data.model.PrivacyOption
+import com.example.data.model.StatusPrivacyMode
 import com.example.data.model.UserProfile
 import com.example.util.FormatUtils
 import com.google.firebase.database.DataSnapshot
@@ -226,6 +227,32 @@ class UserRepository(private val db: FirebaseDatabase) {
         }
     }
 
+    suspend fun updateStatusPrivacySettings(
+        uid: String,
+        mode: StatusPrivacyMode,
+        excludedUids: Set<String>,
+        allowedUids: Set<String>
+    ): Result<Unit> {
+        return try {
+            val legacyOption = when (mode) {
+                StatusPrivacyMode.EVERYONE -> PrivacyOption.EVERYONE
+                StatusPrivacyMode.MY_CONTACTS, StatusPrivacyMode.MY_CONTACTS_EXCEPT -> PrivacyOption.CONTACTS
+                StatusPrivacyMode.ONLY_SHARE_WITH -> PrivacyOption.NOBODY
+            }
+            usersRef.child(uid).updateChildren(
+                mapOf(
+                    "privacyStatus" to legacyOption.name,
+                    "statusPrivacyMode" to mode.name,
+                    "statusExcludedUids" to excludedUids.associateWith { true },
+                    "statusAllowedUids" to allowedUids.associateWith { true }
+                )
+            ).await()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     fun startPresenceTracking(uid: String): ValueEventListener? {
         if (uid.isBlank()) return null
         val connectedRef = db.getReference(".info/connected")
@@ -382,6 +409,27 @@ class UserRepository(private val db: FirebaseDatabase) {
             }
             list
         }
+
+    fun observeSavedContactUids(uid: String): Flow<Set<String>> = callbackFlow {
+        if (uid.isBlank()) {
+            trySend(emptySet())
+            close()
+            return@callbackFlow
+        }
+        val ref = contactsRef.child(uid)
+        val listener = object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                val ids = snapshot.children.mapNotNull { child ->
+                    if (child.getValue(Boolean::class.java) == true) child.key else null
+                }.toSet()
+                trySend(ids)
+            }
+
+            override fun onCancelled(error: DatabaseError) {}
+        }
+        ref.addValueEventListener(listener)
+        awaitClose { ref.removeEventListener(listener) }
+    }
 
     fun observeBlockedUsers(uid: String): Flow<Set<String>> = callbackFlow {
         if (uid.isBlank()) {

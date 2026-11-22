@@ -11,8 +11,10 @@ import com.example.data.model.CallSession
 import com.example.data.model.ChatMessage
 import com.example.data.model.ChatSummary
 import com.example.data.model.FontSizePreference
+import com.example.data.model.MessageStatus
 import com.example.data.model.PrivacyOption
 import com.example.data.model.StatusItem
+import com.example.data.model.StatusPrivacyMode
 import com.example.data.model.StatusType
 import com.example.data.model.StatusViewer
 import com.example.data.model.ThemePreference
@@ -51,6 +53,7 @@ class MainViewModel(
 ) : ViewModel() {
 
     private var presenceListener: ValueEventListener? = null
+    private val deliveredSyncTimestamps = mutableMapOf<String, Long>()
 
     val settings: StateFlow<AppSettingsState> = userPreferences.settingsFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), AppSettingsState())
@@ -64,11 +67,19 @@ class MainViewModel(
     val blockedUids: StateFlow<Set<String>> = userRepository.observeBlockedUsers(currentUid)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptySet())
 
-    val activeStatuses: StateFlow<List<StatusItem>> = blockedUids
-        .flatMapLatest { blocked ->
-            statusRepository.observeActiveStatuses(currentUid, blocked)
-        }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptyList())
+    val savedContactUids: StateFlow<Set<String>> = userRepository.observeSavedContactUids(currentUid)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptySet())
+
+    val myContactAndChatUids: StateFlow<Set<String>> = combine(chats, savedContactUids) { chatList, saved ->
+        val chatPeers = chatList.filter { !it.group && it.peerUid.isNotBlank() }.map { it.peerUid }
+        (chatPeers + saved).toSet()
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptySet())
+
+    val activeStatuses: StateFlow<List<StatusItem>> = combine(blockedUids, myContactAndChatUids) { blocked, contacts ->
+        blocked to contacts
+    }.flatMapLatest { (blocked, contacts) ->
+        statusRepository.observeActiveStatuses(currentUid, blocked, contacts)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptyList())
 
     val callHistory: StateFlow<List<CallHistoryEntry>> = callRepository.observeCallHistory(currentUid)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptyList())
@@ -110,6 +121,24 @@ class MainViewModel(
         presenceListener = userRepository.startPresenceTracking(currentUid)
         userRepository.syncFcmToken(currentUid)
         loadDirectoryUsers()
+        viewModelScope.launch {
+            chats.collect { chatList ->
+                chatList.forEach { summary ->
+                    if (summary.lastMessageSenderId.isNotBlank() &&
+                        summary.lastMessageSenderId != currentUid &&
+                        (summary.unreadCount > 0 || summary.lastMessageStatus == MessageStatus.SENT.name)
+                    ) {
+                        val lastSyncedAt = deliveredSyncTimestamps[summary.chatId] ?: 0L
+                        if (summary.lastMessageAt > lastSyncedAt) {
+                            deliveredSyncTimestamps[summary.chatId] = summary.lastMessageAt
+                            launch {
+                                chatRepository.markChatMessagesDelivered(summary.chatId, currentUid)
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 
     fun clearToast() {
@@ -264,7 +293,14 @@ class MainViewModel(
         }
     }
 
-    fun postTextStatus(text: String, bgColor: Long, privacy: PrivacyOption, onDone: () -> Unit) {
+    fun postTextStatus(
+        text: String,
+        bgColor: Long,
+        privacyMode: StatusPrivacyMode,
+        excludedUids: Set<String> = emptySet(),
+        allowedUids: Set<String> = emptySet(),
+        onDone: () -> Unit
+    ) {
         val me = currentUser.value ?: return
         viewModelScope.launch {
             _isBusy.value = true
@@ -273,7 +309,10 @@ class MainViewModel(
                 type = StatusType.TEXT,
                 text = text,
                 backgroundColorHex = bgColor,
-                privacy = privacy
+                privacyMode = privacyMode,
+                excludedUids = excludedUids,
+                allowedUids = allowedUids,
+                contactUids = myContactAndChatUids.value
             ).onSuccess {
                 _isBusy.value = false
                 _toastMessage.value = "Status published"
@@ -290,7 +329,9 @@ class MainViewModel(
         uri: Uri,
         isVideo: Boolean,
         caption: String,
-        privacy: PrivacyOption,
+        privacyMode: StatusPrivacyMode,
+        excludedUids: Set<String> = emptySet(),
+        allowedUids: Set<String> = emptySet(),
         onDone: () -> Unit
     ) {
         val me = currentUser.value ?: return
@@ -313,7 +354,10 @@ class MainViewModel(
                     type = if (isVideo) StatusType.VIDEO else StatusType.IMAGE,
                     mediaUrl = url,
                     caption = caption,
-                    privacy = privacy
+                    privacyMode = privacyMode,
+                    excludedUids = excludedUids,
+                    allowedUids = allowedUids,
+                    contactUids = myContactAndChatUids.value
                 ).onSuccess {
                     _isBusy.value = false
                     _toastMessage.value = "Status published"
@@ -371,6 +415,22 @@ class MainViewModel(
         viewModelScope.launch {
             userRepository.updatePrivacySettings(currentUid, photo, lastSeen, online, status, readReceipts)
             _toastMessage.value = "Privacy settings saved"
+        }
+    }
+
+    fun updateStatusPrivacy(
+        mode: StatusPrivacyMode,
+        excludedUids: Set<String>,
+        allowedUids: Set<String>
+    ) {
+        viewModelScope.launch {
+            userRepository.updateStatusPrivacySettings(currentUid, mode, excludedUids, allowedUids)
+                .onSuccess {
+                    _toastMessage.value = "Status privacy updated"
+                }
+                .onFailure { err ->
+                    _toastMessage.value = err.message ?: "Could not update status privacy"
+                }
         }
     }
 

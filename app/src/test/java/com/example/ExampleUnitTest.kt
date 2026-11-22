@@ -4,10 +4,14 @@ import com.example.data.model.AppSettingsState
 import com.example.data.model.DEFAULT_COUNTRY_CODES
 import com.example.data.model.FontSizePreference
 import com.example.data.model.PrivacyOption
+import com.example.data.model.StatusItem
+import com.example.data.model.StatusPrivacyMode
 import com.example.data.model.ThemePreference
 import com.example.data.model.UserProfile
+import com.example.data.repository.StatusRepository
 import com.example.util.FormatUtils
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -47,10 +51,52 @@ class ExampleUnitTest {
         assertEquals("alok", user.bestDisplayName())
         assertEquals("Alok Kumar", user.copy(displayName = "Alok Kumar").bestDisplayName())
         assertEquals(PrivacyOption.EVERYONE.name, user.privacyPhoto)
+        assertEquals(StatusPrivacyMode.EVERYONE, user.resolvedStatusPrivacyMode())
         assertTrue(user.readReceiptsEnabled)
 
         val settings = AppSettingsState()
         assertEquals(ThemePreference.SYSTEM, settings.themePreference)
         assertEquals(FontSizePreference.MEDIUM, settings.fontSizePreference)
+    }
+
+    @Test
+    fun `status privacy visibility enforces contacts, except, and only share with rules`() {
+        val owner = "owner_uid"
+        val contact = "contact_uid"
+        val excluded = "excluded_uid"
+        val stranger = "stranger_uid"
+
+        val contactsStatus = StatusItem(
+            id = "s1",
+            uid = owner,
+            privacy = StatusPrivacyMode.MY_CONTACTS.name,
+            contactUids = mapOf(contact to true, excluded to true)
+        )
+        assertTrue(StatusRepository.isStatusVisibleToViewer(contactsStatus, owner, emptySet(), emptySet()))
+        assertTrue(StatusRepository.isStatusVisibleToViewer(contactsStatus, contact, emptySet(), emptySet()))
+        assertFalse(StatusRepository.isStatusVisibleToViewer(contactsStatus, stranger, emptySet(), emptySet()))
+        assertTrue(StatusRepository.isStatusVisibleToViewer(contactsStatus, stranger, emptySet(), setOf(owner)))
+
+        val exceptStatus = StatusItem(
+            id = "s2",
+            uid = owner,
+            privacy = StatusPrivacyMode.MY_CONTACTS_EXCEPT.name,
+            contactUids = mapOf(contact to true, excluded to true),
+            excludedUids = mapOf(excluded to true)
+        )
+        assertTrue(StatusRepository.isStatusVisibleToViewer(exceptStatus, contact, emptySet(), emptySet()))
+        assertFalse(StatusRepository.isStatusVisibleToViewer(exceptStatus, excluded, emptySet(), setOf(owner)))
+        assertFalse(StatusRepository.isStatusVisibleToViewer(exceptStatus, stranger, emptySet(), emptySet()))
+
+        val onlyShareStatus = StatusItem(
+            id = "s3",
+            uid = owner,
+            privacy = StatusPrivacyMode.ONLY_SHARE_WITH.name,
+            allowedUids = mapOf(contact to true)
+        )
+        assertTrue(StatusRepository.isStatusVisibleToViewer(onlyShareStatus, owner, emptySet(), emptySet()))
+        assertTrue(StatusRepository.isStatusVisibleToViewer(onlyShareStatus, contact, emptySet(), emptySet()))
+        assertFalse(StatusRepository.isStatusVisibleToViewer(onlyShareStatus, excluded, emptySet(), setOf(owner)))
+        assertFalse(StatusRepository.isStatusVisibleToViewer(onlyShareStatus, contact, setOf(owner), setOf(owner)))
     }
 }

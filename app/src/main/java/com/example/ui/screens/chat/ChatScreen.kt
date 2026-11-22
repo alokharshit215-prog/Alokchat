@@ -221,7 +221,7 @@ fun ChatScreen(
             }
     }
 
-    LaunchedEffect(visibleMessages.size) {
+    LaunchedEffect(visibleMessages.lastOrNull()?.id, visibleMessages.size) {
         if (visibleMessages.isNotEmpty()) {
             viewModel.markVisibleMessagesRead(visibleMessages)
             listState.animateScrollToItem(visibleMessages.lastIndex)

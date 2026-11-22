@@ -2,6 +2,7 @@ package com.example.data.repository
 
 import com.example.data.model.PrivacyOption
 import com.example.data.model.StatusItem
+import com.example.data.model.StatusPrivacyMode
 import com.example.data.model.StatusType
 import com.example.data.model.StatusViewer
 import com.example.data.model.UserProfile
@@ -19,7 +20,11 @@ class StatusRepository(private val db: FirebaseDatabase) {
     private val statusesRef = db.reference.child("statuses")
     private val statusViewsRef = db.reference.child("statusViews")
 
-    fun observeActiveStatuses(currentUid: String, blockedUids: Set<String>): Flow<List<StatusItem>> =
+    fun observeActiveStatuses(
+        currentUid: String,
+        blockedUids: Set<String>,
+        myContactAndChatUids: Set<String> = emptySet()
+    ): Flow<List<StatusItem>> =
         callbackFlow {
             val listener = object : ValueEventListener {
                 override fun onDataChange(snapshot: DataSnapshot) {
@@ -29,16 +34,14 @@ class StatusRepository(private val db: FirebaseDatabase) {
                         val ownerUid = userNode.key ?: return@forEach
                         if (ownerUid in blockedUids) return@forEach
                         userNode.children.forEach { statusNode ->
-                            val item = statusNode.getValue(StatusItem::class.java) ?: return@forEach
+                            val raw = statusNode.getValue(StatusItem::class.java) ?: return@forEach
+                            val item = raw.copy(
+                                id = statusNode.key ?: raw.id,
+                                uid = raw.uid.ifBlank { ownerUid }
+                            )
                             val validExpiry = item.expiresAt > now
-                            val allowedPrivacy = when {
-                                item.uid == currentUid -> true
-                                item.privacy == PrivacyOption.NOBODY.name -> false
-                                item.excludedUids[currentUid] == true -> false
-                                else -> true
-                            }
-                            if (validExpiry && allowedPrivacy) {
-                                all.add(item.copy(id = statusNode.key ?: item.id))
+                            if (validExpiry && isStatusVisibleToViewer(item, currentUid, blockedUids, myContactAndChatUids)) {
+                                all.add(item)
                             }
                         }
                     }
@@ -58,7 +61,10 @@ class StatusRepository(private val db: FirebaseDatabase) {
         backgroundColorHex: Long = 0xFF008069,
         mediaUrl: String = "",
         caption: String = "",
-        privacy: PrivacyOption = PrivacyOption.EVERYONE
+        privacyMode: StatusPrivacyMode = StatusPrivacyMode.EVERYONE,
+        excludedUids: Set<String> = emptySet(),
+        allowedUids: Set<String> = emptySet(),
+        contactUids: Set<String> = emptySet()
     ): Result<Unit> {
         return try {
             val statusId = statusesRef.child(user.uid).push().key
@@ -77,12 +83,40 @@ class StatusRepository(private val db: FirebaseDatabase) {
                 caption = caption,
                 createdAt = now,
                 expiresAt = expiresAt,
-                privacy = privacy.name
+                privacy = privacyMode.name,
+                excludedUids = excludedUids.associateWith { true },
+                allowedUids = allowedUids.associateWith { true },
+                contactUids = contactUids.associateWith { true }
             )
             statusesRef.child(user.uid).child(statusId).setValue(item).await()
             Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e)
+        }
+    }
+
+    companion object {
+        fun isStatusVisibleToViewer(
+            item: StatusItem,
+            viewerUid: String,
+            blockedUids: Set<String>,
+            viewerContactAndChatUids: Set<String>
+        ): Boolean {
+            if (item.uid == viewerUid) return true
+            if (item.uid in blockedUids) return false
+
+            return when (item.privacy) {
+                PrivacyOption.NOBODY.name -> false
+                StatusPrivacyMode.ONLY_SHARE_WITH.name -> item.allowedUids[viewerUid] == true
+                StatusPrivacyMode.MY_CONTACTS_EXCEPT.name -> {
+                    item.excludedUids[viewerUid] != true &&
+                        (item.contactUids[viewerUid] == true || item.uid in viewerContactAndChatUids)
+                }
+                StatusPrivacyMode.MY_CONTACTS.name, PrivacyOption.CONTACTS.name -> {
+                    item.contactUids[viewerUid] == true || item.uid in viewerContactAndChatUids
+                }
+                else -> item.excludedUids[viewerUid] != true
+            }
         }
     }
 

@@ -126,13 +126,15 @@ class ChatViewModel(
     }
 
     fun markVisibleMessagesRead(msgs: List<ChatMessage>) {
-        val me = currentUser.value ?: return
         viewModelScope.launch {
+            val sendReceipts = currentUser.value?.readReceiptsEnabled
+                ?: userRepository.getUser(currentUid)?.readReceiptsEnabled
+                ?: true
             chatRepository.markMessagesDeliveredAndRead(
                 chatId = chatId,
                 uid = currentUid,
                 messages = msgs,
-                sendReadReceipts = me.readReceiptsEnabled
+                sendReadReceipts = sendReceipts
             )
         }
     }

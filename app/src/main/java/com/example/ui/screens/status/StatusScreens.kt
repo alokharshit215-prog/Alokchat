@@ -9,6 +9,8 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -30,6 +32,12 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.Surface
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
@@ -77,7 +85,7 @@ import androidx.media3.common.MediaItem
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
 import coil.compose.AsyncImage
-import com.example.data.model.PrivacyOption
+import com.example.data.model.StatusPrivacyMode
 import com.example.data.model.StatusType
 import com.example.data.model.UserProfile
 import com.example.ui.components.UserAvatar
@@ -91,12 +99,24 @@ fun CreateTextStatusScreen(
     viewModel: MainViewModel,
     onBack: () -> Unit
 ) {
+    val currentUser by viewModel.currentUser.collectAsStateWithLifecycle()
+    val allUsers by viewModel.allUsers.collectAsStateWithLifecycle()
+    val contactUids by viewModel.myContactAndChatUids.collectAsStateWithLifecycle()
+
     val palette = remember {
         listOf(0xFF008069L, 0xFF128C7EL, 0xFF075E54L, 0xFF512DA8L, 0xFFC2185BL, 0xFFE65100L)
     }
     var colorIndex by remember { mutableIntStateOf(0) }
     var text by remember { mutableStateOf("") }
-    var privacy by remember { mutableStateOf(PrivacyOption.EVERYONE) }
+    var privacyMode by remember(currentUser?.uid) {
+        mutableStateOf(currentUser?.resolvedStatusPrivacyMode() ?: StatusPrivacyMode.EVERYONE)
+    }
+    var excludedUids by remember(currentUser?.uid) {
+        mutableStateOf(currentUser?.statusExcludedUids?.filterValues { it }?.keys ?: emptySet())
+    }
+    var allowedUids by remember(currentUser?.uid) {
+        mutableStateOf(currentUser?.statusAllowedUids?.filterValues { it }?.keys ?: emptySet())
+    }
     var showPrivacyDialog by remember { mutableStateOf(false) }
     val isBusy by viewModel.isBusy.collectAsStateWithLifecycle()
 
@@ -117,9 +137,22 @@ fun CreateTextStatusScreen(
             IconButton(onClick = onBack) {
                 Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.White)
             }
-            Row {
-                TextButton(onClick = { showPrivacyDialog = true }) {
-                    Text(privacy.label, color = Color.White)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                TextButton(
+                    onClick = { showPrivacyDialog = true },
+                    modifier = Modifier.testTag("status_privacy_button")
+                ) {
+                    Icon(
+                        Icons.Default.Lock,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(Modifier.width(4.dp))
+                    Text(
+                        formatStatusPrivacySummary(privacyMode, excludedUids.size, allowedUids.size),
+                        color = Color.White
+                    )
                 }
                 IconButton(onClick = { colorIndex = (colorIndex + 1) % palette.size }) {
                     Icon(Icons.Default.Palette, contentDescription = "Change color", tint = Color.White)
@@ -156,7 +189,14 @@ fun CreateTextStatusScreen(
 
         Button(
             onClick = {
-                viewModel.postTextStatus(text.trim(), palette[colorIndex], privacy, onBack)
+                viewModel.postTextStatus(
+                    text = text.trim(),
+                    bgColor = palette[colorIndex],
+                    privacyMode = privacyMode,
+                    excludedUids = excludedUids,
+                    allowedUids = allowedUids,
+                    onDone = onBack
+                )
             },
             enabled = text.isNotBlank() && !isBusy,
             modifier = Modifier
@@ -170,9 +210,19 @@ fun CreateTextStatusScreen(
     }
 
     if (showPrivacyDialog) {
-        StatusPrivacyDialog(
-            current = privacy,
-            onSelect = { privacy = it; showPrivacyDialog = false },
+        StatusPrivacySettingsDialog(
+            initialMode = privacyMode,
+            initialExcludedUids = excludedUids,
+            initialAllowedUids = allowedUids,
+            allUsers = allUsers,
+            contactUids = contactUids,
+            onSave = { mode, excl, allow ->
+                privacyMode = mode
+                excludedUids = excl
+                allowedUids = allow
+                viewModel.updateStatusPrivacy(mode, excl, allow)
+                showPrivacyDialog = false
+            },
             onDismiss = { showPrivacyDialog = false }
         )
     }
@@ -189,10 +239,22 @@ fun CreateMediaStatusScreen(
 ) {
     val context = LocalContext.current
     val isBusy by viewModel.isBusy.collectAsStateWithLifecycle()
+    val currentUser by viewModel.currentUser.collectAsStateWithLifecycle()
+    val allUsers by viewModel.allUsers.collectAsStateWithLifecycle()
+    val contactUids by viewModel.myContactAndChatUids.collectAsStateWithLifecycle()
+
     var selectedUri by remember { mutableStateOf(initialCapturedUri) }
     var isVideo by remember { mutableStateOf(false) }
     var caption by remember { mutableStateOf("") }
-    var privacy by remember { mutableStateOf(PrivacyOption.EVERYONE) }
+    var privacyMode by remember(currentUser?.uid) {
+        mutableStateOf(currentUser?.resolvedStatusPrivacyMode() ?: StatusPrivacyMode.EVERYONE)
+    }
+    var excludedUids by remember(currentUser?.uid) {
+        mutableStateOf(currentUser?.statusExcludedUids?.filterValues { it }?.keys ?: emptySet())
+    }
+    var allowedUids by remember(currentUser?.uid) {
+        mutableStateOf(currentUser?.statusAllowedUids?.filterValues { it }?.keys ?: emptySet())
+    }
     var showPrivacy by remember { mutableStateOf(false) }
 
     LaunchedEffect(initialCapturedUri) {
@@ -302,13 +364,27 @@ fun CreateMediaStatusScreen(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                TextButton(onClick = { showPrivacy = true }) {
-                    Text("Privacy: ${privacy.label}")
+                TextButton(
+                    onClick = { showPrivacy = true },
+                    modifier = Modifier.testTag("media_status_privacy_button")
+                ) {
+                    Icon(Icons.Default.Lock, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text(formatStatusPrivacySummary(privacyMode, excludedUids.size, allowedUids.size))
                 }
                 Button(
                     onClick = {
                         selectedUri?.let { uri ->
-                            viewModel.postMediaStatus(context, uri, isVideo, caption.trim(), privacy, onBack)
+                            viewModel.postMediaStatus(
+                                context = context,
+                                uri = uri,
+                                isVideo = isVideo,
+                                caption = caption.trim(),
+                                privacyMode = privacyMode,
+                                excludedUids = excludedUids,
+                                allowedUids = allowedUids,
+                                onDone = onBack
+                            )
                         }
                     },
                     enabled = selectedUri != null && !isBusy
@@ -320,9 +396,19 @@ fun CreateMediaStatusScreen(
     }
 
     if (showPrivacy) {
-        StatusPrivacyDialog(
-            current = privacy,
-            onSelect = { privacy = it; showPrivacy = false },
+        StatusPrivacySettingsDialog(
+            initialMode = privacyMode,
+            initialExcludedUids = excludedUids,
+            initialAllowedUids = allowedUids,
+            allUsers = allUsers,
+            contactUids = contactUids,
+            onSave = { mode, excl, allow ->
+                privacyMode = mode
+                excludedUids = excl
+                allowedUids = allow
+                viewModel.updateStatusPrivacy(mode, excl, allow)
+                showPrivacy = false
+            },
             onDismiss = { showPrivacy = false }
         )
     }
@@ -603,34 +689,268 @@ fun StatusViewerScreen(
     }
 }
 
+fun formatStatusPrivacySummary(
+    mode: StatusPrivacyMode,
+    excludedCount: Int,
+    allowedCount: Int
+): String {
+    return when (mode) {
+        StatusPrivacyMode.EVERYONE -> "Everyone"
+        StatusPrivacyMode.MY_CONTACTS -> "My contacts"
+        StatusPrivacyMode.MY_CONTACTS_EXCEPT -> if (excludedCount > 0) "Contacts except ($excludedCount)" else "My contacts except..."
+        StatusPrivacyMode.ONLY_SHARE_WITH -> if (allowedCount > 0) "Only share ($allowedCount)" else "Only share with..."
+    }
+}
+
 @Composable
-private fun StatusPrivacyDialog(
-    current: PrivacyOption,
-    onSelect: (PrivacyOption) -> Unit,
+fun StatusPrivacySettingsDialog(
+    initialMode: StatusPrivacyMode,
+    initialExcludedUids: Set<String>,
+    initialAllowedUids: Set<String>,
+    allUsers: List<UserProfile>,
+    contactUids: Set<String>,
+    onSave: (StatusPrivacyMode, Set<String>, Set<String>) -> Unit,
     onDismiss: () -> Unit
 ) {
+    var selectedMode by remember { mutableStateOf(initialMode) }
+    var excludedUids by remember { mutableStateOf(initialExcludedUids) }
+    var allowedUids by remember { mutableStateOf(initialAllowedUids) }
+    var pickerTargetMode by remember { mutableStateOf<StatusPrivacyMode?>(null) }
+
+    val orderedModes = remember {
+        listOf(
+            StatusPrivacyMode.MY_CONTACTS,
+            StatusPrivacyMode.MY_CONTACTS_EXCEPT,
+            StatusPrivacyMode.ONLY_SHARE_WITH,
+            StatusPrivacyMode.EVERYONE
+        )
+    }
+
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Status Privacy") },
+        title = { Text("Status privacy") },
         text = {
-            Column {
-                PrivacyOption.entries.forEach { opt ->
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Text(
+                    "Who can see your status updates",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                orderedModes.forEach { mode ->
+                    val isSelected = selectedMode == mode
+                    val sub = when (mode) {
+                        StatusPrivacyMode.MY_CONTACTS_EXCEPT -> if (excludedUids.isEmpty()) {
+                            mode.description
+                        } else {
+                            "${excludedUids.size} contact(s) excluded"
+                        }
+                        StatusPrivacyMode.ONLY_SHARE_WITH -> if (allowedUids.isEmpty()) {
+                            mode.description
+                        } else {
+                            "Shared with ${allowedUids.size} selected contact(s)"
+                        }
+                        else -> mode.description
+                    }
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable { onSelect(opt) }
-                            .padding(vertical = 6.dp),
+                            .clip(RoundedCornerShape(10.dp))
+                            .clickable {
+                                selectedMode = mode
+                                if (mode == StatusPrivacyMode.MY_CONTACTS_EXCEPT || mode == StatusPrivacyMode.ONLY_SHARE_WITH) {
+                                    pickerTargetMode = mode
+                                }
+                            }
+                            .padding(vertical = 6.dp, horizontal = 4.dp)
+                            .testTag("status_privacy_option_${mode.name}"),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        RadioButton(selected = opt == current, onClick = { onSelect(opt) })
-                        Spacer(Modifier.width(8.dp))
-                        Text(opt.label)
+                        RadioButton(
+                            selected = isSelected,
+                            onClick = {
+                                selectedMode = mode
+                                if (mode == StatusPrivacyMode.MY_CONTACTS_EXCEPT || mode == StatusPrivacyMode.ONLY_SHARE_WITH) {
+                                    pickerTargetMode = mode
+                                }
+                            }
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(mode.label, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+                            Text(
+                                sub,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        if (mode == StatusPrivacyMode.MY_CONTACTS_EXCEPT || mode == StatusPrivacyMode.ONLY_SHARE_WITH) {
+                            TextButton(onClick = {
+                                selectedMode = mode
+                                pickerTargetMode = mode
+                            }) {
+                                Text("Select")
+                            }
+                        }
+                    }
+                }
+                if (selectedMode == StatusPrivacyMode.ONLY_SHARE_WITH && allowedUids.isEmpty()) {
+                    Text(
+                        "Select at least one person to share your status with.",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { onSave(selectedMode, excludedUids, allowedUids) },
+                enabled = selectedMode != StatusPrivacyMode.ONLY_SHARE_WITH || allowedUids.isNotEmpty(),
+                modifier = Modifier.testTag("save_status_privacy_button")
+            ) {
+                Text("Save")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+        }
+    )
+
+    pickerTargetMode?.let { target ->
+        val initialSet = if (target == StatusPrivacyMode.MY_CONTACTS_EXCEPT) excludedUids else allowedUids
+        val dialogTitle = if (target == StatusPrivacyMode.MY_CONTACTS_EXCEPT) {
+            "Hide status from..."
+        } else {
+            "Only share status with..."
+        }
+        StatusAudiencePickerDialog(
+            title = dialogTitle,
+            allUsers = allUsers,
+            contactUids = contactUids,
+            initialSelected = initialSet,
+            onConfirm = { picked ->
+                if (target == StatusPrivacyMode.MY_CONTACTS_EXCEPT) {
+                    excludedUids = picked
+                } else {
+                    allowedUids = picked
+                }
+                pickerTargetMode = null
+            },
+            onDismiss = { pickerTargetMode = null }
+        )
+    }
+}
+
+@Composable
+private fun StatusAudiencePickerDialog(
+    title: String,
+    allUsers: List<UserProfile>,
+    contactUids: Set<String>,
+    initialSelected: Set<String>,
+    onConfirm: (Set<String>) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var selected by remember { mutableStateOf(initialSelected) }
+    var query by remember { mutableStateOf("") }
+
+    val sortedUsers = remember(allUsers, contactUids, query) {
+        allUsers
+            .filter { u ->
+                query.isBlank() ||
+                    u.bestDisplayName().contains(query, ignoreCase = true) ||
+                    u.username.contains(query, ignoreCase = true) ||
+                    u.email.contains(query, ignoreCase = true)
+            }
+            .sortedWith(
+                compareByDescending<UserProfile> { it.uid in contactUids }
+                    .thenBy { it.bestDisplayName().lowercase() }
+            )
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = query,
+                    onValueChange = { query = it },
+                    placeholder = { Text("Search contacts or users...") },
+                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                if (sortedUsers.isEmpty()) {
+                    Text(
+                        "No users available yet.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(vertical = 12.dp)
+                    )
+                } else {
+                    LazyColumn(modifier = Modifier.heightIn(max = 300.dp)) {
+                        items(sortedUsers, key = { it.uid }) { user ->
+                            val isChecked = user.uid in selected
+                            val isContact = user.uid in contactUids
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        selected = if (isChecked) selected - user.uid else selected + user.uid
+                                    }
+                                    .padding(vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                UserAvatar(
+                                    photoUrl = user.photoUrl,
+                                    name = user.bestDisplayName(),
+                                    size = 38.dp
+                                )
+                                Spacer(Modifier.width(10.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = user.bestDisplayName(),
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.SemiBold,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    Text(
+                                        text = buildString {
+                                            if (user.username.isNotBlank()) append("@${user.username}")
+                                            if (isContact) {
+                                                if (isNotEmpty()) append(" • ")
+                                                append("Contact")
+                                            }
+                                        }.ifBlank { user.email },
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                                Checkbox(
+                                    checked = isChecked,
+                                    onCheckedChange = {
+                                        selected = if (isChecked) selected - user.uid else selected + user.uid
+                                    }
+                                )
+                            }
+                        }
                     }
                 }
             }
         },
         confirmButton = {
-            TextButton(onClick = onDismiss) { Text("Close") }
+            Button(onClick = { onConfirm(selected) }) {
+                Text("Done (${selected.size})")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
         }
     )
 }

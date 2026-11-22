@@ -16,6 +16,13 @@ enum class PrivacyOption(val label: String) {
     NOBODY("Nobody")
 }
 
+enum class StatusPrivacyMode(val label: String, val description: String) {
+    EVERYONE("Everyone", "All registered Alok Chat users"),
+    MY_CONTACTS("My contacts", "People in your contacts and chats"),
+    MY_CONTACTS_EXCEPT("My contacts except...", "Share with contacts, except selected people"),
+    ONLY_SHARE_WITH("Only share with...", "Only selected people can view")
+}
+
 enum class MessageType {
     TEXT, IMAGE, VIDEO, DOCUMENT, PDF, AUDIO, VOICE, CONTACT, LOCATION, SYSTEM
 }
@@ -77,6 +84,9 @@ data class UserProfile(
     val privacyLastSeen: String = PrivacyOption.EVERYONE.name,
     val privacyOnline: String = PrivacyOption.EVERYONE.name,
     val privacyStatus: String = PrivacyOption.EVERYONE.name,
+    val statusPrivacyMode: String = StatusPrivacyMode.EVERYONE.name,
+    val statusExcludedUids: Map<String, Boolean> = emptyMap(),
+    val statusAllowedUids: Map<String, Boolean> = emptyMap(),
     val readReceiptsEnabled: Boolean = true
 ) {
     fun bestDisplayName(): String {
@@ -84,6 +94,15 @@ data class UserProfile(
             email.substringBefore("@").ifBlank {
                 phone.ifBlank { username.ifBlank { "Alok Chat User" } }
             }
+        }
+    }
+
+    fun resolvedStatusPrivacyMode(): StatusPrivacyMode {
+        StatusPrivacyMode.entries.firstOrNull { it.name == statusPrivacyMode }?.let { return it }
+        return when (privacyStatus) {
+            PrivacyOption.CONTACTS.name -> StatusPrivacyMode.MY_CONTACTS
+            PrivacyOption.NOBODY.name -> StatusPrivacyMode.ONLY_SHARE_WITH
+            else -> StatusPrivacyMode.EVERYONE
         }
     }
 }
@@ -182,8 +201,10 @@ data class StatusItem(
     val caption: String = "",
     val createdAt: Long = 0L,
     val expiresAt: Long = 0L,
-    val privacy: String = PrivacyOption.EVERYONE.name,
-    val excludedUids: Map<String, Boolean> = emptyMap()
+    val privacy: String = StatusPrivacyMode.EVERYONE.name,
+    val excludedUids: Map<String, Boolean> = emptyMap(),
+    val allowedUids: Map<String, Boolean> = emptyMap(),
+    val contactUids: Map<String, Boolean> = emptyMap()
 )
 
 @Keep

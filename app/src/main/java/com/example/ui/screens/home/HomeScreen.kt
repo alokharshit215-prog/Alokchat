@@ -39,6 +39,7 @@ import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.NotificationsOff
 import androidx.compose.material.icons.filled.Phone
@@ -90,11 +91,15 @@ import com.example.R
 import com.example.data.model.CallDirection
 import com.example.data.model.CallHistoryEntry
 import com.example.data.model.ChatSummary
+import com.example.data.model.MessageStatus
 import com.example.data.model.StatusItem
+import com.example.data.model.StatusPrivacyMode
 import com.example.data.model.UserProfile
 import com.example.ui.components.AlokBrandLogo
 import com.example.ui.components.MessageStatusTicks
 import com.example.ui.components.UserAvatar
+import com.example.ui.screens.status.StatusPrivacySettingsDialog
+import com.example.ui.screens.status.formatStatusPrivacySummary
 import com.example.ui.theme.AlokDangerRed
 import com.example.ui.theme.AlokMint
 import com.example.ui.viewmodel.MainViewModel
@@ -126,11 +131,13 @@ fun HomeScreen(
     val callHistory by viewModel.callHistory.collectAsStateWithLifecycle()
     val totalUnread by viewModel.totalUnreadCount.collectAsStateWithLifecycle()
     val allUsers by viewModel.allUsers.collectAsStateWithLifecycle()
+    val contactUids by viewModel.myContactAndChatUids.collectAsStateWithLifecycle()
 
     var searchActive by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
     var menuExpanded by remember { mutableStateOf(false) }
     var chatContextTarget by remember { mutableStateOf<ChatSummary?>(null) }
+    var showStatusPrivacyDialog by remember { mutableStateOf(false) }
 
     val pagerState = rememberPagerState(initialPage = 0, pageCount = { 3 })
     val scope = rememberCoroutineScope()
@@ -242,6 +249,13 @@ fun HomeScreen(
                                     onClick = {
                                         menuExpanded = false
                                         onOpenStarred()
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Status privacy") },
+                                    onClick = {
+                                        menuExpanded = false
+                                        showStatusPrivacyDialog = true
                                     }
                                 )
                                 DropdownMenuItem(
@@ -389,6 +403,7 @@ fun HomeScreen(
                     statuses = statuses,
                     searchQuery = searchQuery,
                     onAddStatus = onOpenCreateMediaStatus,
+                    onOpenStatusPrivacy = { showStatusPrivacyDialog = true },
                     onViewStatuses = onViewUserStatuses
                 )
                 2 -> CallsHistoryPage(
@@ -430,6 +445,22 @@ fun HomeScreen(
                     Text("Close")
                 }
             }
+        )
+    }
+
+    if (showStatusPrivacyDialog) {
+        val u = currentUser
+        StatusPrivacySettingsDialog(
+            initialMode = u?.resolvedStatusPrivacyMode() ?: StatusPrivacyMode.EVERYONE,
+            initialExcludedUids = u?.statusExcludedUids?.filterValues { it }?.keys ?: emptySet(),
+            initialAllowedUids = u?.statusAllowedUids?.filterValues { it }?.keys ?: emptySet(),
+            allUsers = allUsers,
+            contactUids = contactUids,
+            onSave = { mode, excl, allow ->
+                viewModel.updateStatusPrivacy(mode, excl, allow)
+                showStatusPrivacyDialog = false
+            },
+            onDismiss = { showStatusPrivacyDialog = false }
         )
     }
 }
@@ -526,8 +557,9 @@ private fun ChatsListPage(
                     ) {
                         if (chat.lastMessageSenderId == currentUid && chat.lastMessage.isNotBlank()) {
                             MessageStatusTicks(
-                                isDelivered = true,
-                                isRead = chat.lastMessageStatus == "READ"
+                                isDelivered = chat.lastMessageStatus == MessageStatus.DELIVERED.name ||
+                                    chat.lastMessageStatus == MessageStatus.READ.name,
+                                isRead = chat.lastMessageStatus == MessageStatus.READ.name
                             )
                             Spacer(Modifier.width(4.dp))
                         }
@@ -588,6 +620,7 @@ private fun UpdatesStatusPage(
     statuses: List<StatusItem>,
     searchQuery: String,
     onAddStatus: () -> Unit,
+    onOpenStatusPrivacy: () -> Unit,
     onViewStatuses: (String) -> Unit
 ) {
     val myUid = currentUser?.uid.orEmpty()
@@ -597,6 +630,10 @@ private fun UpdatesStatusPage(
             .filter { searchQuery.isBlank() || it.userName.contains(searchQuery, ignoreCase = true) }
             .groupBy { it.uid }
     }
+    val statusMode = currentUser?.resolvedStatusPrivacyMode() ?: StatusPrivacyMode.EVERYONE
+    val excludedCount = currentUser?.statusExcludedUids?.count { it.value } ?: 0
+    val allowedCount = currentUser?.statusAllowedUids?.count { it.value } ?: 0
+    val privacyLabel = formatStatusPrivacySummary(statusMode, excludedCount, allowedCount)
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -604,7 +641,40 @@ private fun UpdatesStatusPage(
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         item {
-            Text("Status", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("Status", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Surface(
+                    shape = RoundedCornerShape(20.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(20.dp))
+                        .clickable(onClick = onOpenStatusPrivacy)
+                        .testTag("updates_status_privacy_chip")
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Default.Lock,
+                            contentDescription = "Status privacy",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(15.dp)
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            text = privacyLabel,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
+            }
         }
         item {
             Row(
